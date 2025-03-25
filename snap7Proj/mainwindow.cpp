@@ -22,9 +22,24 @@ MainWindow::MainWindow(QWidget *parent)
 	// 创建一个 PLC 客户端
 	//TS7Client Client;
     m_TS7Client = new TS7Client;
-	const char* plcIP = "192.168.0.133";
+	//const char* plcIP = "192.168.0.133";
+	 // 转换为 QByteArray
+	QByteArray byteArray = m_plcIP.toUtf8(); // 转换为 UTF-8 编码的 QByteArray
+
+	// 创建一个大小为 2048 的 char 数组
+	char charArray[100];
+
+	// 获取 IP 地址的长度
+	size_t length = byteArray.size();
+
+	// 确保不会溢出
+
+		// 复制数据到 charArray
+		memcpy(charArray, byteArray.data(), length);
+		charArray[length] = '\0';  // 确保以 '\0' 结尾
 	// 连接到模拟的 PLC
-	int result = m_TS7Client->ConnectTo(plcIP, 0, 1);  // rack=0, slot=1 对于 S7-PLCSIM
+
+	int result = m_TS7Client->ConnectTo(charArray, 0, 1);  // rack=0, slot=1 对于 S7-PLCSIM
 	if (result != 0)
 	{
 		std::cerr << "Connect PLC Error ! err msg : " << CliErrorText(result).data() << std::endl;
@@ -74,11 +89,12 @@ void MainWindow::readIni()
 			m_sendPort = settings.value("sendPort").toInt();
 			m_sendIP = settings.value("sendIp").toString();
 			m_listenPort = settings.value("listenPort").toInt();
-
+			m_plcIP = settings.value("plcIp").toString();
 
 
 			m_sockaddr_in.sin_family = AF_INET;
 			m_sockaddr_in.sin_addr.S_un.S_addr = inet_addr(m_sendIP.toStdString().c_str());
+			
 			m_sockaddr_in.sin_port = htons(m_sendPort);
 		}
 		else if (section == "input")
@@ -105,8 +121,10 @@ void MainWindow::readIni()
 		else
 		{
 			stTagInfo tagInfo;
-			tagInfo.strName = section;
-
+			
+			QString name= settings.value("name").toString();
+			std::cout << "NAME : " << name.toStdString() << std::endl;
+			tagInfo.strName = name;
 			tagInfo.strType = settings.value("type").toString();
 			tagInfo.iNumber = settings.value("number").toInt();
 			tagInfo.iStart = settings.value("start").toInt();
@@ -128,8 +146,8 @@ void MainWindow::initUdp()
 
 void MainWindow::slot_timeOutRsfresh()
 {
-	//updateRecvUdpJson();
-	sendJsonPlcData();
+	updateRecvUdpJson();
+	//sendJsonPlcData();
 }
 
 void MainWindow::sendJsonPlcData()
@@ -142,20 +160,59 @@ void MainWindow::sendJsonPlcData()
 		if (m_mapTagData.contains(m_outputNames[i]))
 		{
 			auto& tagInfo = m_mapTagData[m_outputNames[i]];
+			//std::cout << " out NAME : " << m_outputNames[i].toStdString() << std::endl;
+			if (tagInfo.strType == "DB")
+			{
+				if (tagInfo.strDataType == "bool")
+				{
+					bool bValue = ReadSingleBool(tagInfo.iNumber, tagInfo.iStart, tagInfo.iPosition); // DB1,  5代表第 6 个布尔值
+					iValue = bValue;
+				}
+				else if (tagInfo.strDataType == "float")
+				{
+					char readBuffer[4]; // 用于读取的 char 缓冲区
+					m_TS7Client->DBRead(tagInfo.iNumber, tagInfo.iStart, sizeof(readBuffer), readBuffer); // 从 DB1 的 startRealByte 开始读取
+					// 将读取的 char 数组转换为 float
+					float readRealValue = ConvertToFloat(readBuffer); // 调用转换函数
+					iValue = readRealValue;
+					int a = 0;
+				}
+			}
+			else if (tagInfo.strType == "EB")
+			{
+				if (tagInfo.strDataType == "bool")
+				{
+					bool bValue = ReadEBSingleBool(tagInfo.iStart, tagInfo.iPosition); // DB1,  5代表第 6 个布尔值
+					iValue = bValue;
+				}
+				else if (tagInfo.strDataType == "float")
+				{
+					char readBuffer[4]; // 用于读取的 char 缓冲区
+					m_TS7Client->EBRead(tagInfo.iStart, sizeof(readBuffer), readBuffer); // 从 DB1 的 startRealByte 开始读取
+					// 将读取的 char 数组转换为 float
+					float readRealValue = ConvertToFloat(readBuffer); // 调用转换函数
+					iValue = readRealValue;
+					int a = 0;
+				}
+			}
+			else if (tagInfo.strType == "AB")
+			{
+				if (tagInfo.strDataType == "bool")
+				{
+					bool bValue = ReadABSingleBool(tagInfo.iStart, tagInfo.iPosition); // DB1,  5代表第 6 个布尔值
+					iValue = bValue;
+				}
+				else if (tagInfo.strDataType == "float")
+				{
+					char readBuffer[4]; // 用于读取的 char 缓冲区
+					m_TS7Client->ABRead(tagInfo.iStart, sizeof(readBuffer), readBuffer); // 从 DB1 的 startRealByte 开始读取
+					// 将读取的 char 数组转换为 float
+					float readRealValue = ConvertToFloat(readBuffer); // 调用转换函数
+					iValue = readRealValue;
+					int a = 0;
+				}
+			}
 			
-			if (tagInfo.strDataType == "bool")
-			{
-				bool bValue = ReadSingleBool(tagInfo.iNumber, tagInfo.iStart, tagInfo.iPosition); // DB1,  5代表第 6 个布尔值
-				iValue = bValue;
-			}
-			else if (tagInfo.strDataType == "float")
-			{
-				char readBuffer[4]; // 用于读取的 char 缓冲区
-				m_TS7Client->DBRead(tagInfo.iNumber, tagInfo.iStart, tagInfo.iPosition, readBuffer); // 从 DB1 的 startRealByte 开始读取
-				// 将读取的 char 数组转换为 float
-				float readRealValue = ConvertToFloat(readBuffer); // 调用转换函数
-				iValue = readRealValue;
-			}
 		}
 		
 		jsonData["plcdata"][i] = iValue;
@@ -168,6 +225,10 @@ void MainWindow::sendJsonPlcData()
 	int sendSize = m_udp->sendDataTo(sendData, strlen(sendData), (sockaddr*)&m_sockaddr_in);
 	if (sendSize == -1) {
 		std::cout << "Failed to send data: " << strerror(errno) << std::endl;
+	}
+	else
+	{
+		std::cout << " sendData : " << data << std::endl;
 	}
 }
 
@@ -184,19 +245,24 @@ void MainWindow::updateRecvUdpJson()
 		{
 			break;
 		}
-
+		std::cout << " recvData : " << s_buf << std::endl;
 		Json jsonData = Json::parse(s_buf);
-
+		
 		int jsonArraySize = jsonData["plcdata"].size();
-		if (jsonArraySize > m_inputNames.size())
-			return;
-		for (int i = 0; i < jsonData["plcdata"].size(); i++)
+	//	if (jsonArraySize > m_inputNames.size())
+	//		return;
+		//for (int i = 0; i < jsonData["plcdata"].size(); i++)
+		if (jsonArraySize < m_inputNames.size())
+		{
+			std::cout << "error: json size <3 : "  << std::endl;
+		}
+		for (int i = 0; i < m_inputNames.size(); i++)
 		{
 			int iWriteValue = jsonData["plcdata"][i];
 			if (m_mapTagData.contains(m_inputNames[i]))
 			{
-				auto& tagInfo = m_mapTagData[m_outputNames[i]];
-
+				auto& tagInfo = m_mapTagData[m_inputNames[i]];
+				//std::cout << " in NAME : " << m_outputNames[i].toStdString() << std::endl;
 				if (tagInfo.strDataType == "bool")
 				{
 					bool bValue = iWriteValue;
@@ -223,8 +289,48 @@ void MainWindow::updateRecvUdpJson()
 		
 		}
 
+		sendJsonPlcData();
+
 	}
+
+	// 测试 
+	//for (int i = 0; i < m_inputNames.size(); i++)
+	//{
+	//	int iWriteValue = 1;
+	//	if (m_mapTagData.contains(m_inputNames[i]))
+	//	{
+	//		auto& tagInfo = m_mapTagData[m_outputNames[i]];
+
+	//		if (tagInfo.strDataType == "bool")
+	//		{
+	//			bool bValue = iWriteValue;
+	//			if (WriteSingleBool(tagInfo.iNumber, tagInfo.iStart, tagInfo.iPosition, bValue))
+	//			{
+	//				std::cout << "成功写入布尔值: " << bValue << std::endl;
+	//			}
+	//		}
+	//		else if (tagInfo.strDataType == "float")
+	//		{
+
+	//			float realValue = iWriteValue; // 要写入的 REAL 值
+
+	//			char realBuffer[4];
+	//			ConvertToByteArray(realValue, realBuffer); // 使用转换函数// 将 REAL 值转换为 char
+
+	//			int result = m_TS7Client->DBWrite(tagInfo.iNumber, tagInfo.iStart, sizeof(realBuffer), realBuffer); // DB1, Start, Size, Buffer
+	//			if (result != 0)
+	//			{
+	//				std::cerr << "写入 REAL 值失败:" << std::endl;
+	//			}
+	//		}
+	//	}
+
+	//}
+
 }
+
+
+
 
 // 函数用于将小端字节数组转换为 float
 float MainWindow::ConvertToFloat(const char* buffer) {
@@ -237,6 +343,7 @@ float MainWindow::ConvertToFloat(const char* buffer) {
 	reversedBuffer[3] = buffer[0];
 	memcpy(&value, reversedBuffer, sizeof(value));
 	return value;
+
 }
 
 // 函数用于将 float 转换为小端字节数组
@@ -279,7 +386,55 @@ bool MainWindow::ReadSingleBool( int dbNumber, int start, int position) {
 	if (result != 0) {
 		char errorText[256];
 
-		std::cerr << "读取布尔值失败: " << errorText << std::endl;
+		std::cerr << "read DB "<< start<<  " bool false: " << errorText << std::endl;
+		return false; // 或者抛出异常
+	}
+
+	// 计算目标布尔值所在的字节
+	int bitIndex = position; // 获取位索引
+
+	// 将目标布尔值从字节中提取出来
+	bool boolValue = (buffer[0] & (1 << bitIndex)) != 0;
+
+	return boolValue;
+}
+
+bool MainWindow::ReadEBSingleBool(int start, int position)
+{
+	// 创建一个缓冲区来存储读取的数据
+	char buffer[1]; // 1 字节足够存储 8 个布尔值
+
+	// 读取 DB 区域中包含目标布尔值的字节
+	int result = m_TS7Client->EBRead(start, sizeof(buffer), buffer);
+
+	if (result != 0) {
+		char errorText[256];
+
+		std::cerr << "read EB" << start << "error" << errorText << std::endl;
+		return false; // 或者抛出异常
+	}
+
+	// 计算目标布尔值所在的字节
+	int bitIndex = position; // 获取位索引
+
+	// 将目标布尔值从字节中提取出来
+	bool boolValue = (buffer[0] & (1 << bitIndex)) != 0;
+
+	return boolValue;
+}
+
+bool MainWindow::ReadABSingleBool(int start, int position)
+{
+	// 创建一个缓冲区来存储读取的数据
+	char buffer[1]; // 1 字节足够存储 8 个布尔值
+
+	// 读取 DB 区域中包含目标布尔值的字节
+	int result = m_TS7Client->ABRead(start, sizeof(buffer), buffer);
+
+	if (result != 0) {
+		char errorText[256];
+
+		std::cerr << "read AB" << start << "error" << errorText << std::endl;
 		return false; // 或者抛出异常
 	}
 

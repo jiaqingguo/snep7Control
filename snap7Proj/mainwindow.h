@@ -48,6 +48,8 @@ private:
 	bool WriteSingleBool(TS7Client& client, int dbNumber, int start, int position, bool value);*/
 
 	bool ReadSingleBool( int dbNumber, int start, int position);
+	bool ReadEBSingleBool(int start, int position);
+	bool ReadABSingleBool(int start, int position);
 
 	bool WriteSingleBool( int dbNumber, int start, int position, bool value);
 
@@ -63,6 +65,7 @@ private:
 	int m_sendPort;
 	QString m_sendIP;
 	int m_listenPort;
+	QString m_plcIP;
 	sockaddr_in m_sockaddr_in;
 
 	QVector<QString> m_inputNames;
